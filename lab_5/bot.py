@@ -42,19 +42,27 @@ client = Mistral(api_key=mistral_api_key)
 class Database:
     def __init__(self):
         self.pool = None
+        self.logger = logging.getLogger(__name__ + ".Database")
 
     async def connect(self):
-        self.pool = await asyncpg.create_pool(
-            user=POSTGRES_USER,
-            password=POSTGRES_PASSWORD,
-            database=POSTGRES_DB,
-            host=POSTGRES_HOST,
-            port=POSTGRES_PORT,
-            ssl="require"
-        )
-        await self.create_tables()
+        self.logger.info(f"Connecting to PostgreSQL at {POSTGRES_HOST}:{POSTGRES_PORT}")
+        try:
+            self.pool = await asyncpg.create_pool(
+                user=POSTGRES_USER,
+                password="***",  # Маскируем пароль в логах
+                database=POSTGRES_DB,
+                host=POSTGRES_HOST,
+                port=POSTGRES_PORT,
+                ssl="require"
+            )
+            await self.create_tables()
+            self.logger.info("Successfully connected to PostgreSQL database")
+        except Exception as e:
+            self.logger.error(f"Failed to connect to PostgreSQL: {e}")
+            raise
 
     async def create_tables(self):
+        self.logger.debug("Creating database tables if not exist")
         async with self.pool.acquire() as conn:
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS chat_history (
@@ -69,26 +77,31 @@ class Database:
             ''')
 
     async def init_chat(self, chat_id: int):
+        self.logger.debug(f"Initializing chat {chat_id}")
         async with self.pool.acquire() as conn:
             exists = await conn.fetchval(
                 "SELECT 1 FROM chat_history WHERE chat_id = $1 AND is_system = TRUE",
                 chat_id
             )
             if not exists:
+                self.logger.info(f"Creating new chat session for {chat_id}")
                 await conn.execute(
                     "INSERT INTO chat_history (chat_id, role, content, is_system) VALUES ($1, $2, $3, $4)",
                     chat_id, "system", "Ты полезный ассистент, отвечай кратко и по делу.", True
                 )
 
     async def get_history(self, chat_id: int):
+        self.logger.debug(f"Getting history for chat {chat_id}")
         async with self.pool.acquire() as conn:
             records = await conn.fetch(
                 "SELECT role, content FROM chat_history WHERE chat_id = $1 ORDER BY created_at",
                 chat_id
             )
+            self.logger.debug(f"Retrieved {len(records)} messages for chat {chat_id}")
             return [dict(r) for r in records]
 
     async def add_message(self, chat_id: int, role: str, content: str):
+        self.logger.debug(f"Adding {role} message to chat {chat_id}")
         async with self.pool.acquire() as conn:
             await conn.execute(
                 "INSERT INTO chat_history (chat_id, role, content) VALUES ($1, $2, $3)",
@@ -96,8 +109,9 @@ class Database:
             )
 
     async def clean_history(self, chat_id: int, max_messages: int = 10):
+        self.logger.debug(f"Cleaning history for chat {chat_id}, keeping max {max_messages} messages")
         async with self.pool.acquire() as conn:
-            await conn.execute('''
+            deleted = await conn.execute('''
                 DELETE FROM chat_history 
                 WHERE id IN (
                     SELECT id FROM (
@@ -110,6 +124,7 @@ class Database:
                     WHERE rn > $2
                 )
             ''', chat_id, max_messages - 1)
+            self.logger.debug(f"History cleaned for chat {chat_id}: {deleted}")
 
 db = Database()
 
@@ -179,7 +194,7 @@ async def self_ping():
 async def on_startup(app: web.Application):
     await db.connect()
     async with db.pool.acquire() as conn:
-        await conn.fetchval("SELECT version();")
+        version = await conn.fetchval("SELECT version();")
     
     webhook_url = await get_webhook_url(app)
     await bot.set_webhook(url=webhook_url, secret_token=WEBHOOK_SECRET)
