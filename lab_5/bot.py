@@ -1,5 +1,6 @@
 from mistralai import Mistral
 import asyncio
+import logging
 import os
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -23,11 +24,17 @@ POSTGRES_PORT = os.getenv("PGPORT")
 
 # Webhook настройки
 WEBHOOK_PATH = "/webhook"
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "secret-key")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "your-secret-key")
 PORT = int(os.getenv("PORT", 8000))
 WAKEUP_INTERVAL = 300
 
-# Инициализация
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 bot = Bot(TOKEN)
 dp = Dispatcher()
 client = Mistral(api_key=mistral_api_key)
@@ -210,6 +217,7 @@ async def create_app():
     return app
 
 if __name__ == "__main__":
+    logger.info(f"Starting bot on port {PORT}")
     app = asyncio.run(create_app())
     web.run_app(
         app,
