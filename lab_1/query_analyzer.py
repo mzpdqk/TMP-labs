@@ -47,156 +47,141 @@ class QueryAnalyzer:
         )
 
         # 1. Basic query analysis
-        type_prompt = f"""Please analyze this GitHub-related query and answer strictly in the following XML format:
-
-Query: {query}
-
-Instructions:
-1. Your answer must use the XML tags shown below, with no text outside the tags
-2. Select query type from: repo/code/user/topic
-   - repo: for finding repositories, projects, frameworks, or libraries
-   - code: for finding code snippets, function implementations, or algorithms
-   - user: for finding users, developers, or organizations
-   - topic: for finding topic, category, or domain related projects
-3. Identify main topic and subtopics
-4. Identify preferred programming language (if any)
-5. Determine minimum stars (if applicable)
-
-Required format:
-<query_type>answer here</query_type>
-<main_topic>answer here</main_topic>
-<sub_topics>subtopic1, subtopic2, ...</sub_topics>
-<language>answer here</language>
-<min_stars>answer here</min_stars>
-
-Example responses:
-
-1. Repository query:
-Query: "Find Python web frameworks with at least 1000 stars"
-<query_type>repo</query_type>
-<main_topic>web frameworks</main_topic>
-<sub_topics>backend development, HTTP server, ORM</sub_topics>
-<language>Python</language>
-<min_stars>1000</min_stars>
-
-2. Code query:
-Query: "How to implement debounce function in JavaScript"
-<query_type>code</query_type>
-<main_topic>debounce function</main_topic>
-<sub_topics>event handling, performance optimization, function throttling</sub_topics>
-<language>JavaScript</language>
-<min_stars>0</min_stars>"""
+        type_prompt = (
+            "Please analyze this GitHub-related query and answer strictly in the "
+            "following XML format:\n\n"
+            f"Query: {query}\n\n"
+            "Instructions:\n"
+            "1. Your answer must use the XML tags shown below, with no text "
+            "outside the tags\n"
+            "2. Select query type from: repo/code/user/topic\n"
+            "   - repo: for finding repositories, projects, frameworks, or libraries\n"
+            "   - code: for finding code snippets, function implementations, or "
+            "algorithms\n"
+            "   - user: for finding users, developers, or organizations\n"
+            "   - topic: for finding topic, category, or domain related projects\n"
+            "3. Identify main topic and subtopics\n"
+            "4. Identify preferred programming language (if any)\n"
+            "5. Determine minimum stars (if applicable)\n\n"
+            "Required format:\n"
+            "<query_type>answer here</query_type>\n"
+            "<main_topic>answer here</main_topic>\n"
+            "<sub_topics>subtopic1, subtopic2, ...</sub_topics>\n"
+            "<language>answer here</language>\n"
+            "<min_stars>answer here</min_stars>\n\n"
+            "Example responses:\n\n"
+            "1. Repository query:\n"
+            'Query: "Find Python web frameworks with at least 1000 stars"\n'
+            "<query_type>repo</query_type>\n"
+            "<main_topic>web frameworks</main_topic>\n"
+            "<sub_topics>backend development, HTTP server, ORM</sub_topics>\n"
+            "<language>Python</language>\n"
+            "<min_stars>1000</min_stars>\n\n"
+            "2. Code query:\n"
+            'Query: "How to implement debounce function in JavaScript"\n'
+            "<query_type>code</query_type>\n"
+            "<main_topic>debounce function</main_topic>\n"
+            "<sub_topics>event handling, performance optimization, function "
+            "throttling</sub_topics>\n"
+            "<language>JavaScript</language>\n"
+            "<min_stars>0</min_stars>"
+        )
 
         # 2. Generate English search criteria
-        github_prompt = f"""Optimize the following GitHub search query:
-
-Query: {query}
-
-Task: Convert the natural language query into an optimized GitHub search query.
-Please use English, regardless of the language of the input query.
-
-Available search fields and filters:
-1. Basic fields:
-   - in:name - Search in repository names
-   - in:description - Search in repository descriptions
-   - in:readme - Search in README files
-   - in:topic - Search in topics
-   - language:X - Filter by programming language
-   - user:X - Repositories from a specific user
-   - org:X - Repositories from a specific organization
-
-2. Code search fields:
-   - extension:X - Filter by file extension
-   - path:X - Filter by path
-   - filename:X - Filter by filename
-
-3. Metric filters:
-   - stars:>X - Has more than X stars
-   - forks:>X - Has more than X forks
-   - size:>X - Size greater than X KB
-   - created:>YYYY-MM-DD - Created after a specific date
-   - pushed:>YYYY-MM-DD - Updated after a specific date
-
-4. Other filters:
-   - is:public/private - Public or private repositories
-   - archived:true/false - Archived or not archived
-   - license:X - Specific license
-   - topic:X - Contains specific topic tag
-
-Examples:
-
-1. Query: "Find Python machine learning libraries with at least 1000 stars"
-<query>machine learning in:description language:python stars:>1000</query>
-
-2. Query: "Recently updated React UI component libraries"
-<query>UI components library in:readme in:description language:javascript topic:react pushed:>2023-01-01</query>
-
-3. Query: "Open source projects developed by Facebook"
-<query>org:facebook is:public</query>
-
-4. Query: "Depth-first search implementation in JavaScript"
-<query>depth first search in:file language:javascript</query>
-
-Please analyze the query and answer using only the XML tag:
-<query>Provide the optimized GitHub search query, using appropriate fields and operators</query>"""
+        github_prompt = (
+            "Optimize the following GitHub search query:\n\n"
+            f"Query: {query}\n\n"
+            "Task: Convert the natural language query into an optimized GitHub "
+            "search query.\n"
+            "Please use English, regardless of the language of the input query.\n\n"
+            "Available search fields and filters:\n"
+            "1. Basic fields:\n"
+            "   - in:name - Search in repository names\n"
+            "   - in:description - Search in repository descriptions\n"
+            "   - in:readme - Search in README files\n"
+            "   - in:topic - Search in topics\n"
+            "   - language:X - Filter by programming language\n"
+            "   - user:X - Repositories from a specific user\n"
+            "   - org:X - Repositories from a specific organization\n\n"
+            "2. Code search fields:\n"
+            "   - extension:X - Filter by file extension\n"
+            "   - path:X - Filter by path\n"
+            "   - filename:X - Filter by filename\n\n"
+            "3. Metric filters:\n"
+            "   - stars:>X - Has more than X stars\n"
+            "   - forks:>X - Has more than X forks\n"
+            "   - size:>X - Size greater than X KB\n"
+            "   - created:>YYYY-MM-DD - Created after a specific date\n"
+            "   - pushed:>YYYY-MM-DD - Updated after a specific date\n\n"
+            "4. Other filters:\n"
+            "   - is:public/private - Public or private repositories\n"
+            "   - archived:true/false - Archived or not archived\n"
+            "   - license:X - Specific license\n"
+            "   - topic:X - Contains specific topic tag\n\n"
+            "Examples:\n\n"
+            '1. Query: "Find Python machine learning libraries with at least 1000 '
+            'stars"\n'
+            "<query>machine learning in:description language:python stars:>1000"
+            "</query>\n\n"
+            '2. Query: "Recently updated React UI component libraries"\n'
+            "<query>UI components library in:readme in:description "
+            "language:javascript topic:react pushed:>2023-01-01</query>\n\n"
+            '3. Query: "Open source projects developed by Facebook"\n'
+            "<query>org:facebook is:public</query>\n\n"
+            '4. Query: "Depth-first search implementation in JavaScript"\n'
+            "<query>depth first search in:file language:javascript</query>\n\n"
+            "Please analyze the query and answer using only the XML tag:\n"
+            "<query>Provide the optimized GitHub search query, using appropriate "
+            "fields and operators</query>"
+        )
 
         # 3. Generate Chinese search criteria
-        chinese_github_prompt = f"""优化以下GitHub搜索查询:
-
-查询: {query}
-
-任务: 将自然语言查询转换为优化的GitHub搜索查询语句。
-为了搜索中文内容，请提取原始查询的关键词并使用中文形式，同时保留GitHub特定的搜索语法为英文。
-
-可用的搜索字段和过滤器:
-1. 基本字段:
-   - in:name - 在仓库名称中搜索
-   - in:description - 在仓库描述中搜索
-   - in:readme - 在README文件中搜索
-   - in:topic - 在主题中搜索
-   - language:X - 按编程语言筛选
-   - user:X - 特定用户的仓库
-   - org:X - 特定组织的仓库
-
-2. 代码搜索字段:
-   - extension:X - 按文件扩展名筛选
-   - path:X - 按路径筛选
-   - filename:X - 按文件名筛选
-
-3. 指标过滤器:
-   - stars:>X - 有超过X颗星
-   - forks:>X - 有超过X个分支
-   - size:>X - 大小超过X KB
-   - created:>YYYY-MM-DD - 在特定日期后创建
-   - pushed:>YYYY-MM-DD - 在特定日期后更新
-
-4. 其他过滤器:
-   - is:public/private - 公开或私有仓库
-   - archived:true/false - 已归档或未归档
-   - license:X - 特定许可证
-   - topic:X - 含特定主题标签
-
-示例:
-
-1. 查询: "找有关机器学习的Python库，至少1000颗星"
-<query>机器学习 in:description language:python stars:>1000</query>
-
-2. 查询: "最近更新的React UI组件库"
-<query>UI 组件库 in:readme in:description language:javascript topic:react pushed:>2023-01-01</query>
-
-3. 查询: "微信小程序开发框架"
-<query>微信小程序 开发框架 in:name in:description in:readme</query>
-
-请分析查询并仅使用XML标签回答:
-<query>提供优化的GitHub搜索查询，使用适当的字段和运算符，保留中文关键词</query>"""
+        chinese_github_prompt = (
+            "优化以下GitHub搜索查询:\n\n"
+            f"查询: {query}\n\n"
+            "任务: 将自然语言查询转换为优化的GitHub搜索查询语句。\n"
+            "为了搜索中文内容，请提取原始查询的关键词并使用中文形式，同时保留GitHub"
+            "特定的搜索语法为英文。\n\n"
+            "可用的搜索字段和过滤器:\n"
+            "1. 基本字段:\n"
+            "   - in:name - 在仓库名称中搜索\n"
+            "   - in:description - 在仓库描述中搜索\n"
+            "   - in:readme - 在README文件中搜索\n"
+            "   - in:topic - 在主题中搜索\n"
+            "   - language:X - 按编程语言筛选\n"
+            "   - user:X - 特定用户的仓库\n"
+            "   - org:X - 特定组织的仓库\n\n"
+            "2. 代码搜索字段:\n"
+            "   - extension:X - 按文件扩展名筛选\n"
+            "   - path:X - 按路径筛选\n"
+            "   - filename:X - 按文件名筛选\n\n"
+            "3. 指标过滤器:\n"
+            "   - stars:>X - 有超过X颗星\n"
+            "   - forks:>X - 有超过X个分支\n"
+            "   - size:>X - 大小超过X KB\n"
+            "   - created:>YYYY-MM-DD - 在特定日期后创建\n"
+            "   - pushed:>YYYY-MM-DD - 在特定日期后更新\n\n"
+            "4. 其他过滤器:\n"
+            "   - is:public/private - 公开或私有仓库\n"
+            "   - archived:true/false - 已归档或未归档\n"
+            "   - license:X - 特定许可证\n"
+            "   - topic:X - 含特定主题标签\n\n"
+            "示例:\n\n"
+            '1. 查询: "找有关机器学习的Python库，至少1000颗星"\n'
+            "<query>机器学习 in:description language:python stars:>1000</query>\n\n"
+            '2. 查询: "最近更新的React UI组件库"\n'
+            "<query>UI 组件库 in:readme in:description language:javascript "
+            "topic:react pushed:>2023-01-01</query>\n\n"
+            '3. 查询: "微信小程序开发框架"\n'
+            "<query>微信小程序 开发框架 in:name in:description in:readme</query>\n\n"
+            "请分析查询并仅使用XML标签回答:\n"
+            "<query>提供优化的GitHub搜索查询，使用适当的字段和运算符，保留中文关键词"
+            "</query>"
+        )
 
         try:
             # Build prompt array
-            prompts = [
-                type_prompt,
-                github_prompt,
-                chinese_github_prompt,
-            ]
+            prompts = [type_prompt, github_prompt, chinese_github_prompt]
 
             show_messages = [
                 "Analyzing query type...",
@@ -205,9 +190,12 @@ Please analyze the query and answer using only the XML tag:
             ]
 
             sys_prompts = [
-                "You are an expert in the GitHub ecosystem, skilled at analyzing GitHub-related queries.",
-                "You are a GitHub search expert, specialized in converting natural language queries into optimized GitHub search queries in English.",
-                "You are a GitHub search expert, skilled at processing queries and retaining Chinese keywords for searching.",
+                "You are an expert in the GitHub ecosystem, skilled at analyzing "
+                "GitHub-related queries.",
+                "You are a GitHub search expert, specialized in converting natural "
+                "language queries into optimized GitHub search queries in English.",
+                "You are a GitHub search expert, skilled at processing queries and "
+                "retaining Chinese keywords for searching.",
             ]
 
             # Use synchronous method to call LLM
@@ -243,7 +231,8 @@ Please analyze the query and answer using only the XML tag:
             )
             if not query_type:
                 print(
-                    f"Debug - Failed to extract query_type. Response was: {extracted_responses[self.BASIC_QUERY_INDEX]}"
+                    f"Debug - Failed to extract query_type. Response was: "
+                    f"{extracted_responses[self.BASIC_QUERY_INDEX]}"
                 )
                 raise Exception("Cannot extract query_type tag content")
             query_type = query_type.lower()
@@ -252,7 +241,9 @@ Please analyze the query and answer using only the XML tag:
                 extracted_responses[self.BASIC_QUERY_INDEX], "main_topic"
             )
             if not main_topic:
-                print(f"Debug - Failed to extract main_topic. Using query as fallback.")
+                print(
+                    "Debug - Failed to extract main_topic. Using query as fallback."
+                )
                 main_topic = query
 
             query_type = self.normalize_query_type(query_type, query)
@@ -306,7 +297,7 @@ Please analyze the query and answer using only the XML tag:
                 if repo_match:
                     repo_id = repo_match.group(2)
 
-            print(f"Debug - Extracted information:")
+            print("Debug - Extracted information:")
             print(f"Query type: {query_type}")
             print(f"Main topic: {main_topic}")
             print(f"Subtopics: {sub_topics}")
