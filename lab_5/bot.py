@@ -197,27 +197,42 @@ async def get_self_url() -> str:
 
 async def self_ping():
     """Отправляет запрос к своему же серверу для предотвращения сна"""
+    logger.info("Starting self-ping service")
     while True:
         try:
             async with aiohttp.ClientSession() as session:
                 url = await get_self_url()
+                logger.debug(f"Sending self-ping to {url}/wakeup")
                 async with session.get(f"{url}/wakeup") as resp:
-                    pass
-        except Exception:
-            pass
+                    if resp.status == 200:
+                        logger.debug("Self-ping successful")
+                    else:
+                        logger.warning(f"Self-ping failed: {resp.status}")
+        except Exception as e:
+            logger.error(f"Self-ping error: {e}")
         await asyncio.sleep(WAKEUP_INTERVAL)
 
 async def on_startup(app: web.Application):
-    await db.connect()
-    async with db.pool.acquire() as conn:
-        version = await conn.fetchval("SELECT version();")
-    
-    webhook_url = await get_webhook_url(app)
-    await bot.set_webhook(url=webhook_url, secret_token=WEBHOOK_SECRET)
+    logger.info("Bot is starting up...")
+    try:
+        await db.connect()
+        async with db.pool.acquire() as conn:
+            version = await conn.fetchval("SELECT version();")
+            logger.info(f"PostgreSQL version: {version}")
+        
+        webhook_url = await get_webhook_url(app)
+        logger.info(f"Setting webhook to {webhook_url}")
+        await bot.set_webhook(url=webhook_url, secret_token=WEBHOOK_SECRET)
+        logger.info("Webhook successfully set")
+    except Exception as e:
+        logger.error(f"Startup failed: {e}")
+        raise
 
 async def on_shutdown(app: web.Application):
+    logger.info("Bot is shutting down...")
     await bot.delete_webhook()
     await db.pool.close()
+    logger.info("Bot stopped successfully")
 
 async def create_app():
     app = web.Application()
@@ -233,6 +248,7 @@ async def create_app():
     
     # Добавляем эндпоинт для wakeup
     async def wakeup_handler(request):
+        logger.debug("Wakeup endpoint called")
         return web.Response(text="OK")
     
     app.router.add_get('/wakeup', wakeup_handler)
