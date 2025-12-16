@@ -281,10 +281,10 @@ class QueryAnalyzer:
             github_params = {
                 "query": english_github_query,
                 "chinese_query": chinese_github_query,
-                "sort": "stars",  # Default sort by stars
-                "order": "desc",  # Default descending order
-                "per_page": 30,  # Default 30 items per page
-                "page": 1,  # Default page 1
+                "sort": "stars",
+                "order": "desc",
+                "per_page": 30,
+                "page": 1,
             }
 
             # Check if it's a specific repository query
@@ -339,7 +339,7 @@ class QueryAnalyzer:
                 if keyword in query_type_lower:
                     return type_name
 
-        return "repo"  # Default return repo type
+        return "repo"
 
     def extract_tag(self, text: str, tag: str) -> str:
         """Extract tag content"""
@@ -356,11 +356,11 @@ class QueryAnalyzer:
 
         # Alternative patterns
         patterns = [
-            rf"<{tag}>\s*([\s\S]*?)\s*</{tag}>",  # Standard XML format
-            rf"<{tag}>([\s\S]*?)(?:</{tag}>|$)",  # Unclosed tags
-            rf"[{tag}]([\s\S]*?)[/{tag}]",  # Bracket format
-            rf"{tag}:\s*(.*?)(?=\n\w|$)",  # Colon format
-            rf"<{tag}>\s*(.*?)(?=<|$)",  # Partially closed
+            rf"<{tag}>\s*([\s\S]*?)\s*</{tag}>",
+            rf"<{tag}>([\s\S]*?)(?:</{tag}>|$)",
+            rf"[{tag}]([\s\S]*?)[/{tag}]",
+            rf"{tag}:\s*(.*?)(?=\n\w|$)",
+            rf"<{tag}>\s*(.*?)(?=<|$)",
         ]
 
         # Try all patterns
@@ -368,8 +368,7 @@ class QueryAnalyzer:
             match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
             if match:
                 content = match.group(1).strip()
-                if content:  # Ensure extracted content is not empty
+                if content:
                     return content
 
-        # If all patterns fail, return empty string
         return ""
