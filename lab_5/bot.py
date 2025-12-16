@@ -130,29 +130,45 @@ db = Database()
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
+    user_id = message.from_user.id
+    username = message.from_user.username
+    logger.info(f"User {user_id} (@{username}) started the bot")
     await message.answer('Привет! Я - бот с нейросетью, отправь запрос')
 
 @dp.message(Command("wakeup"))
 async def cmd_wakeup(message: Message):
+    user_id = message.from_user.id
+    logger.info(f"Wakeup command from user {user_id}")
     await message.answer("Я бодрствую! ⚡")
 
 @dp.message(F.text)
 async def handle_message(message: Message):
     chat_id = message.chat.id
+    user_id = message.from_user.id
+    username = message.from_user.username
+    
+    logger.info(f"Processing message from user {user_id} (@{username}), chat {chat_id}: {message.text[:50]}...")
+    
     await db.init_chat(chat_id)
     await db.add_message(chat_id, "user", message.text)
     history = await db.get_history(chat_id)
     
     try:
+        logger.debug(f"Sending request to Mistral AI for chat {chat_id}, history length: {len(history)}")
         response = client.chat.complete(
             model=model,
             messages=history
         )
         answer = response.choices[0].message.content
+        logger.debug(f"Received response from Mistral AI for chat {chat_id}, response length: {len(answer)}")
+        
         await db.add_message(chat_id, "assistant", answer)
         await db.clean_history(chat_id)
+        
+        logger.info(f"Sending response to user {user_id} (@{username}), chat {chat_id}, response length: {len(answer)}")
         await message.answer(answer, parse_mode="Markdown")
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error processing message from user {user_id}: {e}")
         await message.answer("Произошла ошибка при обработке запроса")
 
 async def get_webhook_url(app: web.Application) -> str:
