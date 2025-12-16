@@ -5,26 +5,49 @@ from typing import Dict, List
 
 @dataclass
 class SearchCriteria:
-    """Search criteria for GitHub search"""
+    """
+    Search criteria for GitHub search operations.
 
-    query_type: str  # Query type: repo/code/user/topic
-    main_topic: str  # Main topic
-    sub_topics: List[str]  # Subtopics list
-    language: str  # Programming language
-    min_stars: int  # Minimum stars
-    github_params: Dict  # GitHub search parameters
-    original_query: str = ""  # Original query string
-    repo_id: str = ""  # Specific repository ID or name
+    Attributes:
+        query_type: Type of query (repo/code/user/topic)
+        main_topic: Main search topic
+        sub_topics: List of related subtopics
+        language: Programming language filter
+        min_stars: Minimum star count filter
+        github_params: Dictionary of GitHub API parameters
+        original_query: Original user query string
+        repo_id: Specific repository identifier (owner/repo format)
+    """
+
+    query_type: str
+    main_topic: str
+    sub_topics: List[str]
+    language: str
+    min_stars: int
+    github_params: Dict
+    original_query: str = ""
+    repo_id: str = ""
 
 
 class QueryAnalyzer:
-    """Query analyzer for GitHub searches"""
+    """
+    Analyzes user queries and converts them into structured GitHub search criteria.
+
+    This class uses LLM to understand natural language queries and generate
+    optimized GitHub search queries in both English and Chinese.
+
+    Attributes:
+        BASIC_QUERY_INDEX: Index for basic query analysis responses
+        GITHUB_QUERY_INDEX: Index for GitHub query optimization responses
+        valid_types: Mapping of query types to their related keywords
+    """
 
     # Response index constants
     BASIC_QUERY_INDEX = 0
     GITHUB_QUERY_INDEX = 1
 
     def __init__(self):
+        """Initialize the QueryAnalyzer with valid query type mappings."""
         self.valid_types = {
             "repo": ["repository", "project", "library", "framework", "tool"],
             "code": [
@@ -40,7 +63,20 @@ class QueryAnalyzer:
         }
 
     def analyze_query(self, query: str, chatbot: List, llm_kwargs: Dict):
-        """Analyze query intent"""
+        """
+        Analyze user query and generate structured search criteria.
+
+        Args:
+            query: Natural language query from user
+            chatbot: Chatbot interface for displaying messages
+            llm_kwargs: Keyword arguments for LLM configuration
+
+        Returns:
+            SearchCriteria object with parsed query information
+
+        Raises:
+            Exception: If query analysis fails or LLM response is invalid
+        """
         from crazy_functions.crazy_utils import (
             request_gpt_model_multi_threads_with_very_awesome_ui_and_high_efficiency
             as request_gpt,
@@ -180,7 +216,7 @@ class QueryAnalyzer:
         )
 
         try:
-            # Build prompt array
+            # Build prompt array for parallel LLM processing
             prompts = [type_prompt, github_prompt, chinese_github_prompt]
 
             show_messages = [
@@ -198,7 +234,7 @@ class QueryAnalyzer:
                 "retaining Chinese keywords for searching.",
             ]
 
-            # Use synchronous method to call LLM
+            # Call LLM with parallel processing for efficiency
             responses = yield from request_gpt(
                 inputs_array=prompts,
                 inputs_show_user_array=show_messages,
@@ -209,7 +245,7 @@ class QueryAnalyzer:
                 max_workers=3,
             )
 
-            # Extract needed content from collected responses
+            # Extract LLM responses from the collected results
             extracted_responses = []
             for i in range(len(prompts)):
                 if (i * 2 + 1) < len(responses):
@@ -225,7 +261,7 @@ class QueryAnalyzer:
                 else:
                     raise Exception(f"Did not receive response {i + 1}")
 
-            # Parse basic information
+            # Parse basic information from the first LLM response
             query_type = self.extract_tag(
                 extracted_responses[self.BASIC_QUERY_INDEX], "query_type"
             )
@@ -248,7 +284,7 @@ class QueryAnalyzer:
 
             query_type = self.normalize_query_type(query_type, query)
 
-            # Extract subtopics
+            # Extract subtopics as a list
             sub_topics = []
             sub_topics_text = self.extract_tag(
                 extracted_responses[self.BASIC_QUERY_INDEX], "sub_topics"
@@ -256,12 +292,12 @@ class QueryAnalyzer:
             if sub_topics_text:
                 sub_topics = [topic.strip() for topic in sub_topics_text.split(",")]
 
-            # Extract language
+            # Extract programming language preference
             language = self.extract_tag(
                 extracted_responses[self.BASIC_QUERY_INDEX], "language"
             )
 
-            # Extract minimum stars
+            # Extract minimum star count requirement
             min_stars = 0
             min_stars_text = self.extract_tag(
                 extracted_responses[self.BASIC_QUERY_INDEX], "min_stars"
@@ -269,15 +305,15 @@ class QueryAnalyzer:
             if min_stars_text and min_stars_text.isdigit():
                 min_stars = int(min_stars_text)
 
-            # Parse GitHub search parameters - English
+            # Parse English GitHub search query from second LLM response
             english_github_query = self.extract_tag(
                 extracted_responses[self.GITHUB_QUERY_INDEX], "query"
             )
 
-            # Parse GitHub search parameters - Chinese
+            # Parse Chinese GitHub search query from third LLM response
             chinese_github_query = self.extract_tag(extracted_responses[2], "query")
 
-            # Build GitHub parameters
+            # Build GitHub API parameters dictionary
             github_params = {
                 "query": english_github_query,
                 "chinese_query": chinese_github_query,
@@ -287,7 +323,7 @@ class QueryAnalyzer:
                 "page": 1,
             }
 
-            # Check if it's a specific repository query
+            # Check if query is for a specific repository
             repo_id = ""
             if "repo:" in english_github_query or "repository:" in english_github_query:
                 repo_match = re.search(
@@ -297,6 +333,7 @@ class QueryAnalyzer:
                 if repo_match:
                     repo_id = repo_match.group(2)
 
+            # Debug information for development
             print("Debug - Extracted information:")
             print(f"Query type: {query_type}")
             print(f"Main topic: {main_topic}")
@@ -307,7 +344,7 @@ class QueryAnalyzer:
             print(f"Chinese GitHub parameters: {chinese_github_query}")
             print(f"Specific repository: {repo_id}")
 
-            # Update returned SearchCriteria, including English and Chinese queries
+            # Return structured search criteria object
             return SearchCriteria(
                 query_type=query_type,
                 main_topic=main_topic,
@@ -323,7 +360,16 @@ class QueryAnalyzer:
             raise Exception(f"Query analysis failed: {str(e)}")
 
     def normalize_query_type(self, query_type: str, query: str) -> str:
-        """Normalize query type"""
+        """
+        Normalize query type to one of the valid types.
+
+        Args:
+            query_type: Raw query type from LLM response
+            query: Original user query for fallback analysis
+
+        Returns:
+            Normalized query type (repo/code/user/topic)
+        """
         if query_type in ["repo", "code", "user", "topic"]:
             return query_type
 
@@ -342,7 +388,16 @@ class QueryAnalyzer:
         return "repo"
 
     def extract_tag(self, text: str, tag: str) -> str:
-        """Extract tag content"""
+        """
+        Extract content between XML tags using multiple pattern matching strategies.
+
+        Args:
+            text: Text containing XML tags
+            tag: Name of the tag to extract
+
+        Returns:
+            Extracted content or empty string if not found
+        """
         if not text:
             return ""
 
@@ -354,16 +409,16 @@ class QueryAnalyzer:
             if content:
                 return content
 
-        # Alternative patterns
+        # Alternative patterns for different tag formats
         patterns = [
-            rf"<{tag}>\s*([\s\S]*?)\s*</{tag}>",
-            rf"<{tag}>([\s\S]*?)(?:</{tag}>|$)",
-            rf"[{tag}]([\s\S]*?)[/{tag}]",
-            rf"{tag}:\s*(.*?)(?=\n\w|$)",
-            rf"<{tag}>\s*(.*?)(?=<|$)",
+            rf"<{tag}>\s*([\s\S]*?)\s*</{tag}>",  # Standard XML with whitespace
+            rf"<{tag}>([\s\S]*?)(?:</{tag}>|$)",  # Unclosed tags at end
+            rf"[{tag}]([\s\S]*?)[/{tag}]",  # Square bracket format
+            rf"{tag}:\s*(.*?)(?=\n\w|$)",  # Colon format (key: value)
+            rf"<{tag}>\s*(.*?)(?=<|$)",  # Partially closed tags
         ]
 
-        # Try all patterns
+        # Try all patterns until a match is found
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
             if match:
