@@ -35,11 +35,6 @@ class QueryAnalyzer:
 
     This class uses LLM to understand natural language queries and generate
     optimized GitHub search queries in both English and Chinese.
-
-    Attributes:
-        BASIC_QUERY_INDEX: Index for basic query analysis responses
-        GITHUB_QUERY_INDEX: Index for GitHub query optimization responses
-        valid_types: Mapping of query types to their related keywords
     """
 
     # Response index constants
@@ -82,8 +77,24 @@ class QueryAnalyzer:
             as request_gpt,
         )
 
-        # 1. Basic query analysis
-        type_prompt = (
+        prompts = self._build_prompts(query)
+        responses = yield from self._call_llm_parallel(
+            prompts, chatbot, llm_kwargs
+        )
+
+        return self._parse_responses(responses, query)
+
+    def _build_prompts(self, query: str) -> List[str]:
+        """Build LLM prompts for query analysis."""
+        type_prompt = self._build_type_prompt(query)
+        github_prompt = self._build_github_prompt(query)
+        chinese_prompt = self._build_chinese_prompt(query)
+
+        return [type_prompt, github_prompt, chinese_prompt]
+
+    def _build_type_prompt(self, query: str) -> str:
+        """Build prompt for query type analysis."""
+        return (
             "Please analyze this GitHub-related query and answer strictly in the "
             "following XML format:\n\n"
             f"Query: {query}\n\n"
@@ -123,8 +134,9 @@ class QueryAnalyzer:
             "<min_stars>0</min_stars>"
         )
 
-        # 2. Generate English search criteria
-        github_prompt = (
+    def _build_github_prompt(self, query: str) -> str:
+        """Build prompt for English GitHub query optimization."""
+        return (
             "Optimize the following GitHub search query:\n\n"
             f"Query: {query}\n\n"
             "Task: Convert the natural language query into an optimized GitHub "
@@ -171,8 +183,9 @@ class QueryAnalyzer:
             "fields and operators</query>"
         )
 
-        # 3. Generate Chinese search criteria
-        chinese_github_prompt = (
+    def _build_chinese_prompt(self, query: str) -> str:
+        """Build prompt for Chinese GitHub query optimization."""
+        return (
             "优化以下GitHub搜索查询:\n\n"
             f"查询: {query}\n\n"
             "任务: 将自然语言查询转换为优化的GitHub搜索查询语句。\n"
@@ -215,149 +228,169 @@ class QueryAnalyzer:
             "</query>"
         )
 
-        try:
-            # Build prompt array for parallel LLM processing
-            prompts = [type_prompt, github_prompt, chinese_github_prompt]
+    def _call_llm_parallel(self, prompts, chatbot, llm_kwargs):
+        """Call LLM with parallel processing for efficiency."""
+        from crazy_functions.crazy_utils import (
+            request_gpt_model_multi_threads_with_very_awesome_ui_and_high_efficiency
+            as request_gpt,
+        )
 
-            show_messages = [
-                "Analyzing query type...",
-                "Optimizing English GitHub search parameters...",
-                "Optimizing Chinese GitHub search parameters...",
-            ]
+        show_messages = [
+            "Analyzing query type...",
+            "Optimizing English GitHub search parameters...",
+            "Optimizing Chinese GitHub search parameters...",
+        ]
 
-            sys_prompts = [
-                "You are an expert in the GitHub ecosystem, skilled at analyzing "
-                "GitHub-related queries.",
-                "You are a GitHub search expert, specialized in converting natural "
-                "language queries into optimized GitHub search queries in English.",
-                "You are a GitHub search expert, skilled at processing queries and "
-                "retaining Chinese keywords for searching.",
-            ]
+        sys_prompts = [
+            "You are an expert in the GitHub ecosystem, skilled at analyzing "
+            "GitHub-related queries.",
+            "You are a GitHub search expert, specialized in converting natural "
+            "language queries into optimized GitHub search queries in English.",
+            "You are a GitHub search expert, skilled at processing queries and "
+            "retaining Chinese keywords for searching.",
+        ]
 
-            # Call LLM with parallel processing for efficiency
-            responses = yield from request_gpt(
-                inputs_array=prompts,
-                inputs_show_user_array=show_messages,
-                llm_kwargs=llm_kwargs,
-                chatbot=chatbot,
-                history_array=[[] for _ in prompts],
-                sys_prompt_array=sys_prompts,
-                max_workers=3,
+        return (yield from request_gpt(
+            inputs_array=prompts,
+            inputs_show_user_array=show_messages,
+            llm_kwargs=llm_kwargs,
+            chatbot=chatbot,
+            history_array=[[] for _ in prompts],
+            sys_prompt_array=sys_prompts,
+            max_workers=3,
+        ))
+
+    def _parse_responses(self, responses, query):
+        """Parse LLM responses and build SearchCriteria object."""
+        extracted_responses = self._extract_llm_responses(responses)
+
+        query_type = self._parse_query_type(extracted_responses, query)
+        main_topic = self._parse_main_topic(extracted_responses, query)
+        sub_topics = self._parse_sub_topics(extracted_responses)
+        language = self._parse_language(extracted_responses)
+        min_stars = self._parse_min_stars(extracted_responses)
+        
+        english_query = self.extract_tag(
+            extracted_responses[self.GITHUB_QUERY_INDEX], "query"
+        )
+        chinese_query = self.extract_tag(extracted_responses[2], "query")
+        
+        github_params = self._build_github_params(english_query, chinese_query)
+        repo_id = self._extract_repo_id(english_query)
+
+        self._log_debug_info(
+            query_type, main_topic, sub_topics, language,
+            min_stars, english_query, chinese_query, repo_id
+        )
+
+        return SearchCriteria(
+            query_type=query_type,
+            main_topic=main_topic,
+            sub_topics=sub_topics,
+            language=language,
+            min_stars=min_stars,
+            github_params=github_params,
+            original_query=query,
+            repo_id=repo_id,
+        )
+
+    def _extract_llm_responses(self, responses):
+        """Extract LLM responses from the collected results."""
+        extracted_responses = []
+        for i in range(3):  # We always expect 3 responses
+            if (i * 2 + 1) < len(responses):
+                response = responses[i * 2 + 1]
+                if response is None:
+                    raise Exception(f"Response {i} is None")
+                if not isinstance(response, str):
+                    try:
+                        response = str(response)
+                    except:
+                        raise Exception(f"Cannot convert response {i} to string")
+                extracted_responses.append(response)
+            else:
+                raise Exception(f"Did not receive response {i + 1}")
+        return extracted_responses
+
+    def _parse_query_type(self, responses, query):
+        """Parse and normalize query type from LLM response."""
+        query_type = self.extract_tag(responses[self.BASIC_QUERY_INDEX], "query_type")
+        if not query_type:
+            print(
+                f"Debug - Failed to extract query_type. Response was: "
+                f"{responses[self.BASIC_QUERY_INDEX]}"
             )
+            raise Exception("Cannot extract query_type tag content")
+        
+        query_type = query_type.lower()
+        return self.normalize_query_type(query_type, query)
 
-            # Extract LLM responses from the collected results
-            extracted_responses = []
-            for i in range(len(prompts)):
-                if (i * 2 + 1) < len(responses):
-                    response = responses[i * 2 + 1]
-                    if response is None:
-                        raise Exception(f"Response {i} is None")
-                    if not isinstance(response, str):
-                        try:
-                            response = str(response)
-                        except:
-                            raise Exception(f"Cannot convert response {i} to string")
-                    extracted_responses.append(response)
-                else:
-                    raise Exception(f"Did not receive response {i + 1}")
+    def _parse_main_topic(self, responses, query):
+        """Parse main topic from LLM response."""
+        main_topic = self.extract_tag(responses[self.BASIC_QUERY_INDEX], "main_topic")
+        if not main_topic:
+            print("Debug - Failed to extract main_topic. Using query as fallback.")
+            return query
+        return main_topic
 
-            # Parse basic information from the first LLM response
-            query_type = self.extract_tag(
-                extracted_responses[self.BASIC_QUERY_INDEX], "query_type"
+    def _parse_sub_topics(self, responses):
+        """Parse subtopics from LLM response."""
+        sub_topics_text = self.extract_tag(
+            responses[self.BASIC_QUERY_INDEX], "sub_topics"
+        )
+        if sub_topics_text:
+            return [topic.strip() for topic in sub_topics_text.split(",")]
+        return []
+
+    def _parse_language(self, responses):
+        """Parse programming language from LLM response."""
+        return self.extract_tag(responses[self.BASIC_QUERY_INDEX], "language")
+
+    def _parse_min_stars(self, responses):
+        """Parse minimum stars from LLM response."""
+        min_stars_text = self.extract_tag(
+            responses[self.BASIC_QUERY_INDEX], "min_stars"
+        )
+        if min_stars_text and min_stars_text.isdigit():
+            return int(min_stars_text)
+        return 0
+
+    def _build_github_params(self, english_query, chinese_query):
+        """Build GitHub API parameters dictionary."""
+        return {
+            "query": english_query,
+            "chinese_query": chinese_query,
+            "sort": "stars",
+            "order": "desc",
+            "per_page": 30,
+            "page": 1,
+        }
+
+    def _extract_repo_id(self, english_query):
+        """Extract repository ID from GitHub query."""
+        if "repo:" in english_query or "repository:" in english_query:
+            repo_match = re.search(
+                r"(repo|repository):([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)",
+                english_query,
             )
-            if not query_type:
-                print(
-                    f"Debug - Failed to extract query_type. Response was: "
-                    f"{extracted_responses[self.BASIC_QUERY_INDEX]}"
-                )
-                raise Exception("Cannot extract query_type tag content")
-            query_type = query_type.lower()
+            if repo_match:
+                return repo_match.group(2)
+        return ""
 
-            main_topic = self.extract_tag(
-                extracted_responses[self.BASIC_QUERY_INDEX], "main_topic"
-            )
-            if not main_topic:
-                print(
-                    "Debug - Failed to extract main_topic. Using query as fallback."
-                )
-                main_topic = query
-
-            query_type = self.normalize_query_type(query_type, query)
-
-            # Extract subtopics as a list
-            sub_topics = []
-            sub_topics_text = self.extract_tag(
-                extracted_responses[self.BASIC_QUERY_INDEX], "sub_topics"
-            )
-            if sub_topics_text:
-                sub_topics = [topic.strip() for topic in sub_topics_text.split(",")]
-
-            # Extract programming language preference
-            language = self.extract_tag(
-                extracted_responses[self.BASIC_QUERY_INDEX], "language"
-            )
-
-            # Extract minimum star count requirement
-            min_stars = 0
-            min_stars_text = self.extract_tag(
-                extracted_responses[self.BASIC_QUERY_INDEX], "min_stars"
-            )
-            if min_stars_text and min_stars_text.isdigit():
-                min_stars = int(min_stars_text)
-
-            # Parse English GitHub search query from second LLM response
-            english_github_query = self.extract_tag(
-                extracted_responses[self.GITHUB_QUERY_INDEX], "query"
-            )
-
-            # Parse Chinese GitHub search query from third LLM response
-            chinese_github_query = self.extract_tag(extracted_responses[2], "query")
-
-            # Build GitHub API parameters dictionary
-            github_params = {
-                "query": english_github_query,
-                "chinese_query": chinese_github_query,
-                "sort": "stars",
-                "order": "desc",
-                "per_page": 30,
-                "page": 1,
-            }
-
-            # Check if query is for a specific repository
-            repo_id = ""
-            if "repo:" in english_github_query or "repository:" in english_github_query:
-                repo_match = re.search(
-                    r"(repo|repository):([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)",
-                    english_github_query,
-                )
-                if repo_match:
-                    repo_id = repo_match.group(2)
-
-            # Debug information for development
-            print("Debug - Extracted information:")
-            print(f"Query type: {query_type}")
-            print(f"Main topic: {main_topic}")
-            print(f"Subtopics: {sub_topics}")
-            print(f"Language: {language}")
-            print(f"Minimum stars: {min_stars}")
-            print(f"English GitHub parameters: {english_github_query}")
-            print(f"Chinese GitHub parameters: {chinese_github_query}")
-            print(f"Specific repository: {repo_id}")
-
-            # Return structured search criteria object
-            return SearchCriteria(
-                query_type=query_type,
-                main_topic=main_topic,
-                sub_topics=sub_topics,
-                language=language,
-                min_stars=min_stars,
-                github_params=github_params,
-                original_query=query,
-                repo_id=repo_id,
-            )
-
-        except Exception as e:
-            raise Exception(f"Query analysis failed: {str(e)}")
+    def _log_debug_info(
+        self, query_type, main_topic, sub_topics, language,
+        min_stars, english_query, chinese_query, repo_id
+    ):
+        """Log debug information for development."""
+        print("Debug - Extracted information:")
+        print(f"Query type: {query_type}")
+        print(f"Main topic: {main_topic}")
+        print(f"Subtopics: {sub_topics}")
+        print(f"Language: {language}")
+        print(f"Minimum stars: {min_stars}")
+        print(f"English GitHub parameters: {english_query}")
+        print(f"Chinese GitHub parameters: {chinese_query}")
+        print(f"Specific repository: {repo_id}")
 
     def normalize_query_type(self, query_type: str, query: str) -> str:
         """
@@ -401,7 +434,6 @@ class QueryAnalyzer:
         if not text:
             return ""
 
-        # Standard XML format (handling multi-line and special characters)
         pattern = f"<{tag}>(.*?)</{tag}>"
         match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
         if match:
@@ -409,16 +441,14 @@ class QueryAnalyzer:
             if content:
                 return content
 
-        # Alternative patterns for different tag formats
         patterns = [
-            rf"<{tag}>\s*([\s\S]*?)\s*</{tag}>",  # Standard XML with whitespace
-            rf"<{tag}>([\s\S]*?)(?:</{tag}>|$)",  # Unclosed tags at end
-            rf"[{tag}]([\s\S]*?)[/{tag}]",  # Square bracket format
-            rf"{tag}:\s*(.*?)(?=\n\w|$)",  # Colon format (key: value)
-            rf"<{tag}>\s*(.*?)(?=<|$)",  # Partially closed tags
+            rf"<{tag}>\s*([\s\S]*?)\s*</{tag}>",
+            rf"<{tag}>([\s\S]*?)(?:</{tag}>|$)",
+            rf"[{tag}]([\s\S]*?)[/{tag}]",
+            rf"{tag}:\s*(.*?)(?=\n\w|$)",
+            rf"<{tag}>\s*(.*?)(?=<|$)",
         ]
 
-        # Try all patterns until a match is found
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
             if match:
