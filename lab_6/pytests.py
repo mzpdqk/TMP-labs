@@ -4,9 +4,8 @@ from unittest.mock import patch, MagicMock
 from scipy import stats
 import sys
 import os
+from lab4_statanalisys import *
 
-# Добавляем путь к модулю
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 # Вместо импорта всего кода,будем тестировать логику через моки
 
@@ -101,4 +100,5 @@ def test_with_fixture(sample_data):
     assert np.abs(np.mean(sample_data) + 4) < 1.0  # Примерно
 
 if __name__ == "__main__":
+
     pytest.main()
